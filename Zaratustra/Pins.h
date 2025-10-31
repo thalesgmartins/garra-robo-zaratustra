@@ -11,21 +11,20 @@
 /**
  * Declarações de pinos feitas com base em um Arduino Mega conectado a RAMPS v1.6 (ou v1.4).
  *
- * Para a substituição de pinos (em caso de danos na placa, ou se necessário adicionar um novo componente), consulte:
- * @link https://reprap.org/wiki/RAMPS_1.4#Pins
-**/
+ * Para a substituição de pinos (em caso de danos na placa, ou se necessário adicionar um novo componente), 
+ * consulte: https://reprap.org/wiki/RAMPS_1.4#Pins
+*/
 
-//
-// Limit Switches
-// 
+// Endstops
 #define ENDSTOP_X_MIN     3          // Base
 #define ENDSTOP_Y_MIN    14          // Corpo
 #define ENDSTOP_Z_MIN    18          // Braço
 #define ENDSTOP_Z_MAX    19          // Mudar o Estado
 
-//
-// Steppers
-//
+// Pino do Sensor de Laser 
+#define SENSOR_LASER_PIN 26          // --> Step-Pin da Extrusora E0
+
+// Motores de Passo
 #define X_DIR_PIN        55
 #define X_STEP_PIN       54
 #define X_ENABLE_PIN     38

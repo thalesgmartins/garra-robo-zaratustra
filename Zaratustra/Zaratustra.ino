@@ -1,121 +1,258 @@
 /** --------------------------------------------------------------------------------------------------
  * @file Zaratustra.ino
- * @brief Faz o controle da garra, utilizando Classes para cada Motor e Botão.
+ * @brief Faz o controle da garra, fazendo a leitura de utilizando Classes para cada Motor e Botão.
  * @author Thales Martins
- * @version Beta 2.1
- * @date 14/10/2024
+ * @version Beta 0.3.0
 /** --------------------------------------------------------------------------------------------------*/
 
+#include <AccelStepper.h>
+#include <Bounce2.h>
+
 #include "Pins.h"
-#include "Motors.h"
-#include "Buttons.h"
 
-// Gerenciamento de botões
-ButtonManager buttonTrocarModo(ENDSTOP_Z_MAX);
+// --------------------------------------------------------------------------------------------------
+// DECLARAÇÃO DO SENSOR DE LASER
+// --------------------------------------------------------------------------------------------------
+Bounce2::Button sensorLaser = Bounce2::Button();
 
-ButtonManager endstopBase(ENDSTOP_X_MIN);
-ButtonManager endstopCorpo(ENDSTOP_Y_MIN);
-ButtonManager endstopBraco(ENDSTOP_Z_MIN);
 
-// Declaração dos motores
-AccelStepper stepperBase(AccelStepper::DRIVER, X_STEP_PIN, X_DIR_PIN);
+// --------------------------------------------------------------------------------------------------
+// DECLARAÇÃO DO BOTÃO DE TROCA DE ESTADOS
+// --------------------------------------------------------------------------------------------------
+Bounce2::Button buttonTrocarModo = Bounce2::Button();
+
+
+// --------------------------------------------------------------------------------------------------
+// DECLARAÇÃO DOS ENDSTOPS
+// --------------------------------------------------------------------------------------------------
+Bounce2::Button endstopBase  = Bounce2::Button();
+Bounce2::Button endstopCorpo = Bounce2::Button();
+Bounce2::Button endstopBraco = Bounce2::Button();
+
+
+// --------------------------------------------------------------------------------------------------
+// DECLARAÇÃO DOS MOTORES
+// --------------------------------------------------------------------------------------------------
+AccelStepper  stepperBase(AccelStepper::DRIVER, X_STEP_PIN, X_DIR_PIN);
 AccelStepper stepperCorpo(AccelStepper::DRIVER, Y_STEP_PIN, Y_DIR_PIN);
 AccelStepper stepperBraco(AccelStepper::DRIVER, Z_STEP_PIN, Z_DIR_PIN);
 
-// Controladores de motores
-MotorController motorBase(stepperBase, X_ENABLE_PIN, endstopBase);
-MotorController motorCorpo(stepperCorpo, Y_ENABLE_PIN, endstopCorpo);
-MotorController motorBraco(stepperBraco, Z_ENABLE_PIN, endstopBraco);
 
-bool movimentoConcluido = true;
+// --------------------------------------------------------------------------------------------------
+// CONTROLE DE ESTADOS
+// --------------------------------------------------------------------------------------------------
+typedef enum {          // Um ENUM para armazenar os estados da garra:
+  HOME,                 //  - Quando estiver fazendo Homing,
+  PARADO,               //  - Quando estiver travada,
+  MOVENDO,              //  - Quando estiver fazendo o looping de movimentos
+  UNKNOWN               //  - Quando não consegue ler - Ao Inicializar
+} Estado;
+
+Estado actualState = UNKNOWN;
+Estado previousState = UNKNOWN;
+
 byte estagioDosMovimentos = 0;
+bool ultimoMovimentoConcluido = false;
 
-//================================================================================
-// Estado do botão
-bool mode = true;
-bool Pmode = false;
-//=================================================================================
+//bool movimentoConcluido = true;
 
-
+// --------------------------------------------------------------------------------------------------
+// SETUP DOS ENDSTOPS, MOTORES, BOTÃO E SENSOR
+// --------------------------------------------------------------------------------------------------
 void setup() {
   Serial.begin(9600);
+  Serial.println("Iniciando Setup da Garra.");
 
-  motorBase.habilitar();
-  motorCorpo.habilitar();
-  motorBraco.habilitar();
-
-  motorBase.configurar(600, 500);
-  motorCorpo.configurar(600, 500);
-  motorBraco.configurar(600, 500);
-
-  motorCorpo.executarHoming();
-  motorBraco.executarHoming();
-  motorBase.executarHoming();
-
+  setupButtons();
+  setupMotors();
+  executarHoming();
+  Serial.println("Setup Concluído.");
 }
 
+void setupButtons() {
+  Serial.println("Iniciando Configuração da lib Bounce2:");
+
+  // Configuração do Sensor de Laser
+  Serial.println("  Configurando Sensor de Laser");
+  sensorLaser.attach(SENSOR_LASER_PIN, INPUT_PULLUP);
+  sensorLaser.setPressedState(LOW);
+  sensorLaser.interval(25);
+
+  // Configuração do Botão que faz a troca de modos
+  Serial.println("  Configurando Botão de Troca de Estados");
+  buttonTrocarModo.attach(ENDSTOP_Z_MAX, INPUT_PULLUP);
+  buttonTrocarModo.setPressedState(LOW);
+  buttonTrocarModo.interval(25);
+
+  // Configuração do Endstop da Base
+  Serial.println("  Configurando Endstops");
+  endstopBase.attach(ENDSTOP_X_MIN, INPUT_PULLUP);
+  endstopBase.setPressedState(LOW);
+  endstopBase.interval(25);
+  
+  // Configuração do Endstop do Corpo
+  endstopCorpo.attach(ENDSTOP_Y_MIN, INPUT_PULLUP);
+  endstopCorpo.setPressedState(LOW);
+  endstopCorpo.interval(25);
+  
+  // Configuração do Endstop do Braço
+  endstopBraco.attach(ENDSTOP_Z_MIN, INPUT_PULLUP);
+  endstopBraco.setPressedState(LOW);
+  endstopBraco.interval(25);
+
+  Serial.println("Configuração da lib Bounce2 Concluída");
+}
+
+void setupMotors() {
+
+  // --------------------------------------------------------
+  // HABILITA MOTORES
+  // --------------------------------------------------------
+
+  // Habilita o motor da Base
+  stepperBase.setEnablePin(X_ENABLE_PIN);
+  stepperBase.setPinsInverted(false, false, true);
+  stepperBase.enableOutputs();
+
+  // Habilita o motor do Corpo
+  stepperCorpo.setEnablePin(Y_ENABLE_PIN);
+  stepperCorpo.setPinsInverted(false, false, true);
+  stepperCorpo.enableOutputs();
+
+  // Habilita o motor do Braço
+  stepperBraco.setEnablePin(Z_ENABLE_PIN);
+  stepperBraco.setPinsInverted(false, false, true);
+  stepperBraco.enableOutputs();
+
+  // --------------------------------------------------------
+  // Configura velocidade e aceleração dos motores
+  // --------------------------------------------------------
+
+  // Configura Motor da Base
+  stepperBase.setMaxSpeed(700);
+  stepperBase.setAcceleration(500);
+
+  // Configura Motor do Corpo
+  stepperCorpo.setMaxSpeed(700);
+  stepperCorpo.setAcceleration(500);
+
+  // Configura Motor do Braço
+  stepperBraco.setMaxSpeed(700);
+  stepperBraco.setAcceleration(500);
+}
+
+void executarHoming() {
+  Serial.println("Fazendo Homing dos Motores");
+  homeMotor(stepperCorpo, endstopCorpo);           // Home do Corpo
+  homeMotor(stepperBraco, endstopBraco);           // Home do Braço
+  homeMotor(stepperBase, endstopBase);             // Home da Base
+}
+
+void homeMotor(AccelStepper &stepper, Bounce2::Button &endstop) {
+  endstop.update();
+
+  if (!endstop.isPressed()) {
+    while (!endstop.pressed()) {
+      endstop.update();
+      stepper.setSpeed(-800);
+      stepper.runSpeed();
+    }
+  }
+
+  stepper.stop();
+  stepper.setCurrentPosition(0);
+}
+
+// --------------------------------------------------------------------------------------------------
+// CONTROLE DA GARRA: Leitura do sensor, botões e controle de estados.
+// --------------------------------------------------------------------------------------------------
 void loop() {
-  buttonTrocarModo.atualizar();
 
-  executarMovimentos();
+  // Atualiza o estado do sensor e botão de modos
+  sensorLaser.update();
+  buttonTrocarModo.update();
 
+  // Baseado na leitura, pega o estado Atual
+  actualState = getActualState();
 
-  if (!movimentoConcluido) {
-    executarMovimentos();
+  // Se deve parar, para suavemente.
+  if (shouldStop()) {
+    stepperBase.stop();
+    stepperBraco.stop();
+    stepperCorpo.stop();
+    return;
   }
 
-  // Atualiza movimentos continuamente, sem travar o código
-  motorBase.executarMovimento();
-  motorCorpo.executarMovimento();
-  motorBraco.executarMovimento();
-
-  if (movimentoConcluido) {
-    estagioDosMovimentos++;
-    movimentoConcluido = false;
+  // Se estiver no modo Home, vai para a Home.
+  if (shouldHome()) {
+    executarHoming();
+    return;
   }
 
-  // Verifica se todos os motores chegaram à posição alvo
-  if (  motorBase.getPosicaoAtual() == motorBase.getPosicaoAlvo() && 
-      motorCorpo.getPosicaoAtual() == motorCorpo.getPosicaoAlvo() &&
-      motorBraco.getPosicaoAtual() == motorBraco.getPosicaoAlvo()) {
-    movimentoConcluido = true;
+  //
+  if (shouldMove()) {
+    if (movimentoConcluido()) {
+      executarMovimentos();
+    }
+
+    else {
+      stepperBase.run();
+      stepperBraco.run();
+      stepperCorpo.run();
+    }
   }
+}
+
+// --------------------------------------------------------------------------------------------------
+//  
+// --------------------------------------------------------------------------------------------------
+
+Estado getActualState() {
+  if (sensorLaser.isPressed()) return PARADO;
+  if (buttonTrocarModo.isPressed()) return HOME;
+
+  return MOVENDO;
+}
+
+bool shouldStop() {
+  return actualState == MOVENDO && actualState != previousState;
+}
+
+bool shouldHome() {
+  return actualState == HOME && actualState != previousState;
+}
+
+bool shouldMove() {
+  return actualState == MOVENDO;
 }
 
 void executarMovimentos() {
-  long posInicialCorpo = 2500, posInicialBraco = 2600, posInicialBase = 4100;
-  long posFinalCorpo = 2500, posFinalBraco = 2600, posFinalBase = 10000;
+  static byte estagioDosMovimentos = 0;
+
+  if (ultimoMovimentoConcluido) {
+    estagioDosMovimentos++;
+  }
 
   switch (estagioDosMovimentos) {
     case 0:
-      moverPosicaoInicial();
+      ultimoMovimentoConcluido = false;
+      stepperBase.moveTo(200);
+      stepperBraco.moveTo(200);
+      stepperCorpo.moveTo(200);
       break;
     case 1:
-      moverSimultaneamente(posInicialCorpo, posInicialBraco, posInicialBase);
+      ultimoMovimentoConcluido = false;
+      stepperBase.moveTo(400);
       break;
     case 2:
-      moverPosicaoInicial();
+      ultimoMovimentoConcluido = false;
+      stepperBraco.moveTo(600);
+      stepperCorpo.moveTo(600);
       break;
     case 3:
-      moverMotor(motorBase, posFinalBase);  // Move o motor base individualmente
-      break;
-    case 4:
-      moverSimultaneamente(posFinalCorpo, posFinalBraco, posFinalBase);  // Move para a posição final
-      break;
-    case 5:
-      moverPosicaoInicial();
-      break;
-    case 6:
-      moverPosicaoInicial();
-      break;
-    case 7:
-      moverMotor(motorBase, posFinalBase);
-      break;
-    case 8:
-      moverSimultaneamente(posFinalCorpo, posFinalBraco, posFinalBase);
-      break;
-    case 9:
-      moverPosicaoInicial();
+      ultimoMovimentoConcluido = false;
+      stepperBraco.moveTo(200);
+      stepperCorpo.moveTo(200);
       break;
     default:
       estagioDosMovimentos = 0;
@@ -123,20 +260,8 @@ void executarMovimentos() {
   }
 }
 
-//
-// Funções de Movimento dos Motores
-//
-void moverPosicaoInicial() {
-  long posCorpo = 1200, posBraco = 1400, posBase = 4100;
-  moverSimultaneamente(posCorpo, posBraco, posBase);
-}
+bool movimentoConcluido() {
+  if (actualState == MOVENDO && previousState != MOVENDO) return false;
 
-void moverMotor(MotorController &motor, long pos) {
-  motor.definirPosicao(pos);
-}
-
-void moverSimultaneamente(long posCorpo, long posBraco, long posBase) {
-  motorCorpo.definirPosicao(posCorpo);
-  motorBraco.definirPosicao(posBraco);
-  motorBase.definirPosicao(posBase);
+  return stepperBase.distanceToGo() == 0 && stepperBraco.distanceToGo() == 0 && stepperCorpo.distanceToGo() == 0;
 }

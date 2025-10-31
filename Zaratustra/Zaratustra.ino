@@ -235,29 +235,33 @@ void executarMovimentos() {
   switch (estagioDosMovimentos) {
     case 0:
       Serial.println("Indo para Estágio 0");
-      stepperBase.moveTo(200);
-      stepperBraco.moveTo(200);
-      stepperCorpo.moveTo(200);
+      stepperBase.moveTo(4100);
+      stepperBraco.moveTo(1400);
+      stepperCorpo.moveTo(1200);
       break;
     case 1:
       Serial.println("Indo para Estágio 1");
-      stepperBase.moveTo(400);
+      stepperBraco.moveTo(2600);
+      stepperCorpo.moveTo(2500);
       break;
     case 2:
       Serial.println("Indo para Estágio 2");
-      stepperBraco.moveTo(600);
-      stepperCorpo.moveTo(600);
+      stepperBraco.moveTo(1400);
+      stepperCorpo.moveTo(1200);
       break;
     case 3:
       Serial.println("Indo para Estágio 3");
-      stepperBraco.moveTo(200);
-      stepperCorpo.moveTo(200);
+      stepperBase.moveTo(10000);
       break;
+    case 4:
+      Serial.println("Indo para Estágio 4");
+      stepperBraco.moveTo(2600);
+      stepperCorpo.moveTo(2500);
   }
 
   estagioDosMovimentos++;
 
-  if (estagioDosMovimentos > 3) {
+  if (estagioDosMovimentos > 4) {
     estagioDosMovimentos = 0;
   }
 }

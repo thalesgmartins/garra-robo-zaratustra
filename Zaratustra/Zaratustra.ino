@@ -201,6 +201,8 @@ void loop() {
       stepperCorpo.run();
     }
   }
+
+  previousState = actualState;
 }
 
 // --------------------------------------------------------------------------------------------------
@@ -215,7 +217,7 @@ Estado getActualState() {
 }
 
 bool shouldStop() {
-  return actualState == MOVENDO && actualState != previousState;
+  return actualState == PARADO;
 }
 
 bool shouldHome() {
@@ -229,39 +231,39 @@ bool shouldMove() {
 void executarMovimentos() {
   static byte estagioDosMovimentos = 0;
 
-  if (ultimoMovimentoConcluido) {
-    estagioDosMovimentos++;
-  }
 
   switch (estagioDosMovimentos) {
     case 0:
-      ultimoMovimentoConcluido = false;
+      Serial.println("Indo para Estágio 0");
       stepperBase.moveTo(200);
       stepperBraco.moveTo(200);
       stepperCorpo.moveTo(200);
       break;
     case 1:
-      ultimoMovimentoConcluido = false;
+      Serial.println("Indo para Estágio 1");
       stepperBase.moveTo(400);
       break;
     case 2:
-      ultimoMovimentoConcluido = false;
+      Serial.println("Indo para Estágio 2");
       stepperBraco.moveTo(600);
       stepperCorpo.moveTo(600);
       break;
     case 3:
-      ultimoMovimentoConcluido = false;
+      Serial.println("Indo para Estágio 3");
       stepperBraco.moveTo(200);
       stepperCorpo.moveTo(200);
       break;
-    default:
-      estagioDosMovimentos = 0;
-      break;
+  }
+
+  estagioDosMovimentos++;
+
+  if (estagioDosMovimentos > 3) {
+    estagioDosMovimentos = 0;
   }
 }
 
 bool movimentoConcluido() {
-  if (actualState == MOVENDO && previousState != MOVENDO) return false;
-
-  return stepperBase.distanceToGo() == 0 && stepperBraco.distanceToGo() == 0 && stepperCorpo.distanceToGo() == 0;
+  return stepperBase.distanceToGo() == 0 && 
+         stepperBraco.distanceToGo() == 0 && 
+         stepperCorpo.distanceToGo() == 0;
 }
